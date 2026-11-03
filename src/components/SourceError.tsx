@@ -4,6 +4,7 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 import { SourceMeta } from "@/lib/types";
 import { theme } from "@/lib/theme";
+import { t } from "@/lib/i18n";
 
 interface SourceErrorProps {
   meta: SourceMeta;
@@ -28,8 +29,8 @@ export function SourceError({ meta }: SourceErrorProps) {
             </a>
           )}
           <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200">
-            <p className="font-medium text-red-700 mb-2">Capture Failed</p>
-            <p className="text-sm text-red-600">{meta.processingError || "Unknown error occurred"}</p>
+            <p className="font-medium text-red-700 mb-2">{t("capture.failedTitle")}</p>
+            <p className="text-sm text-red-600">{meta.processingError || t("capture.failedUnknown")}</p>
           </div>
         </div>
       </div>

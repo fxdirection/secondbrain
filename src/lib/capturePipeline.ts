@@ -4,7 +4,8 @@ import { debugLog } from "./log";
 import { AGENT_CONTEXT_CONFIG } from "@/lib/config";
 import { extractFromUrl, extractFromHtml } from "@/lib/content";
 import { analyzeContent, analyzeFile, findRelatedSources, analyzeConnections, mergeSourceIntoConnections, formatTextContent, generateTitle } from "@/lib/claude";
-import { saveSourceContent, saveSourceAnalysis, setSourceConnections, saveConnectionError, listSourcesForConnections, loadSource, failSource, getLibraryPath } from "@/lib/storage";
+import { saveSourceContent, saveSourceAnalysis, setSourceConnections, saveConnectionError, listSourcesForConnections, loadSource, failSource, getLibraryPath, loadUserConfig } from "@/lib/storage";
+import { localizeError, normalizeLocale } from "@/lib/i18n";
 import { Connection, SourceType } from "@/lib/types";
 import { isBilibiliInput, sampleTranscript } from "@/lib/bilibili";
 import { captureBilibiliVideo } from "@/lib/videoCapture";
@@ -98,6 +99,7 @@ export async function processFileInBackground(
   sourceType: SourceType,
   displayName: string // original filename for display
 ): Promise<void> {
+  const locale = normalizeLocale((await loadUserConfig()).locale);
   try {
     let content: string;
     let extractedTitle: string;
@@ -132,7 +134,8 @@ export async function processFileInBackground(
     debugLog(`[${id}] File processing complete`);
   } catch (error) {
     console.error(`[${id}] File processing failed:`, error);
-    await failSource(id, error instanceof Error ? error.message : "Unknown error");
+    const raw = error instanceof Error ? error.message : "Unknown error";
+    await failSource(id, localizeError(locale, raw));
     throw error;
   }
 }

@@ -6,7 +6,7 @@ import { theme } from "@/lib/theme";
 import type { ThemeMode, RssFeedSource } from "@/lib/storage";
 import { DEFAULT_RSS_FEEDS, SUGGESTED_SEARCH_SOURCES } from "@/lib/config";
 import { AGENT_PROVIDER_DETAILS, type AgentProvider, type AgentStatus } from "@/lib/agentTypes";
-import { VideoSettings } from "@/components/VideoSettings";
+import { AccountsSettings } from "@/components/AccountsSettings";
 import { t } from "@/lib/i18n";
 
 export interface SettingsModalProps {
@@ -61,7 +61,7 @@ const FONT_OPTIONS = [
 
 const RSS_PRESETS: RssFeedSource[] = DEFAULT_RSS_FEEDS;
 
-type Tab = "appearance" | "feed" | "agent";
+type Tab = "appearance" | "feed" | "agent" | "accounts";
 
 const AGENT_OPTIONS: AgentProvider[] = ["claude", "codex"];
 
@@ -308,6 +308,7 @@ export function SettingsModal({
               { id: "appearance" as Tab, label: t("settings.appearance") },
               { id: "feed" as Tab, label: t("settings.feed") },
               { id: "agent" as Tab, label: t("settings.agent") },
+              { id: "accounts" as Tab, label: t("settings.accounts") },
             ]).map((tab) => (
               <button
                 key={tab.id}
@@ -1045,8 +1046,11 @@ export function SettingsModal({
                 )}
               </p>
             </div>
-            <VideoSettings palette={palette} />
           </>
+        )}
+
+        {activeTab === "accounts" && (
+          <AccountsSettings palette={palette} />
         )}
 
         </div>

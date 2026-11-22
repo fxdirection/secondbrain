@@ -59,6 +59,14 @@ export function getBilibiliCookiePath(): string {
   return path.join(getRootPath(), "bilibili.cookies.txt");
 }
 
+export function getZhihuCookiePath(): string {
+  return path.join(getRootPath(), "zhihu.cookies.txt");
+}
+
+export function getXiaohongshuCookiePath(): string {
+  return path.join(getRootPath(), "xiaohongshu.cookies.txt");
+}
+
 export type RootPathSource = "env" | "local" | "default";
 
 interface LocalAppConfig {
@@ -884,9 +892,20 @@ ${content}
   };
 }
 
-/**
- * Mark a source as failed by writing error.txt
- */
+export async function updatePendingTitle(
+  id: string,
+  title: string,
+  libraryPath = getLibraryPath()
+): Promise<void> {
+  const cleaned = title.trim();
+  if (!cleaned) return;
+  const metaPath = path.join(libraryPath, id, "meta.json");
+  const meta = JSON.parse(await fs.readFile(metaPath, "utf-8")) as { original_title?: string };
+  if (meta.original_title === cleaned) return;
+  meta.original_title = cleaned;
+  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf-8");
+}
+
 export async function failSource(
   id: string,
   error: string,

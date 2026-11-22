@@ -3,12 +3,20 @@ import path from "path";
 import { debugLog } from "./log";
 import { AGENT_CONTEXT_CONFIG } from "@/lib/config";
 import { extractFromUrl, extractFromHtml } from "@/lib/content";
-import { analyzeContent, analyzeFile, findRelatedSources, analyzeConnections, mergeSourceIntoConnections, formatTextContent, generateTitle } from "@/lib/claude";
-import { saveSourceContent, saveSourceAnalysis, setSourceConnections, saveConnectionError, listSourcesForConnections, loadSource, failSource, getLibraryPath, loadUserConfig } from "@/lib/storage";
+import { analyzeContent, analyzeFile, findRelatedSources, analyzeConnections, mergeSourceIntoConnections, formatTextContent, formatTranscriptContent, generateTitle } from "@/lib/claude";
+import { saveSourceContent, saveSourceAnalysis, setSourceConnections, saveConnectionError, listSourcesForConnections, loadSource, failSource, getLibraryPath, loadUserConfig, writeSourceProgress } from "@/lib/storage";
 import { localizeError, normalizeLocale } from "@/lib/i18n";
 import { Connection, SourceType } from "@/lib/types";
 import { isBilibiliInput, sampleTranscript } from "@/lib/bilibili";
 import { captureBilibiliVideo } from "@/lib/videoCapture";
+import { isZhihuInput } from "@/lib/zhihu";
+import { captureZhihuPost } from "@/lib/zhihuCapture";
+import { isYouTubeInput } from "@/lib/youtube";
+import { captureYouTubeVideo } from "@/lib/youtubeCapture";
+import { isXiaohongshuInput } from "@/lib/xiaohongshu";
+import { captureXiaohongshuNote } from "@/lib/xiaohongshuCapture";
+import { isDouyinInput } from "@/lib/douyin";
+import { captureDouyinVideo } from "@/lib/douyinCapture";
 
 interface ProcessInput {
   url?: string;
@@ -40,6 +48,56 @@ export async function processSourceInBackground(
       content = transcript.markdown;
       analysisUrl = transcript.url;
       await fs.writeFile(path.join(getLibraryPath(), id, "transcript.srt"), transcript.srt, "utf-8");
+      try {
+        await writeSourceProgress(id, "Organizing the transcript");
+        content = await formatTranscriptContent(transcript.markdown, id);
+      } catch (error) {
+        debugLog(`[${id}] Transcript formatting failed, keeping the timestamped text`);
+        content = transcript.markdown;
+        console.error(`[${id}] Transcript formatting failed:`, error);
+      }
+    } else if (url && isZhihuInput(url)) {
+      debugLog(`[${id}] Capturing Zhihu post`);
+      const post = await captureZhihuPost(id, url);
+      extractedTitle = post.title;
+      content = post.markdown;
+      analysisUrl = post.url;
+    } else if (url && isYouTubeInput(url)) {
+      debugLog(`[${id}] Capturing YouTube transcript`);
+      const transcript = await captureYouTubeVideo(id, url);
+      extractedTitle = transcript.title;
+      content = transcript.markdown;
+      analysisUrl = transcript.url;
+      await fs.writeFile(path.join(getLibraryPath(), id, "transcript.srt"), transcript.srt, "utf-8");
+      try {
+        await writeSourceProgress(id, "Organizing the transcript");
+        content = await formatTranscriptContent(transcript.markdown, id);
+      } catch (error) {
+        debugLog(`[${id}] Transcript formatting failed, keeping the timestamped text`);
+        content = transcript.markdown;
+        console.error(`[${id}] Transcript formatting failed:`, error);
+      }
+    } else if (url && isXiaohongshuInput(url)) {
+      debugLog(`[${id}] Capturing Xiaohongshu note`);
+      const note = await captureXiaohongshuNote(id, url);
+      extractedTitle = note.title;
+      content = note.markdown;
+      analysisUrl = note.url;
+    } else if (url && isDouyinInput(url)) {
+      debugLog(`[${id}] Capturing Douyin transcript`);
+      const transcript = await captureDouyinVideo(id, url);
+      extractedTitle = transcript.title;
+      content = transcript.markdown;
+      analysisUrl = transcript.url;
+      await fs.writeFile(path.join(getLibraryPath(), id, "transcript.srt"), transcript.srt, "utf-8");
+      try {
+        await writeSourceProgress(id, "Organizing the transcript");
+        content = await formatTranscriptContent(transcript.markdown, id);
+      } catch (error) {
+        debugLog(`[${id}] Transcript formatting failed, keeping the timestamped text`);
+        content = transcript.markdown;
+        console.error(`[${id}] Transcript formatting failed:`, error);
+      }
     } else if (html) {
       debugLog(`[${id}] Extracting content from HTML (${html.length} chars)...`);
       const extracted = await extractFromHtml(html, url, undefined, id);
@@ -70,7 +128,7 @@ export async function processSourceInBackground(
     debugLog(`[${id}] Analyzing content: ${extractedTitle}`);
     const analysis = await analyzeContent(
       extractedTitle,
-      url && isBilibiliInput(url) ? sampleTranscript(content) : content,
+      url && (isBilibiliInput(url) || isZhihuInput(url) || isYouTubeInput(url) || isXiaohongshuInput(url) || isDouyinInput(url)) ? sampleTranscript(content) : content,
       analysisUrl,
       id
     );

@@ -5,7 +5,13 @@ from faster_whisper import WhisperModel
 
 model_name, audio_path, language = sys.argv[1:4]
 model = WhisperModel(model_name, device="cuda", compute_type="float16")
-segments, _info = model.transcribe(audio_path, language=language)
+segments, _info = model.transcribe(
+    audio_path,
+    language=language,
+    beam_size=1,
+    vad_filter=True,
+    condition_on_previous_text=False,
+)
 payload = [
     {"start": segment.start, "end": segment.end, "text": segment.text.strip()}
     for segment in segments

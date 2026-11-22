@@ -4,8 +4,12 @@ import { getBilibiliCookiePath, loadUserConfig, normalizeVideoSettings } from "@
 import { bilibiliLoginName } from "@/lib/videoCapture";
 import { whisperStatus } from "@/lib/whisper";
 
-export async function GET(): Promise<NextResponse> {
+const WHISPER_CACHE_MS = 10 * 60 * 1000;
+let whisperCache: { at: number; available: boolean; detail: string } | null = null;
+
+export async function GET(request: Request): Promise<NextResponse> {
   const settings = normalizeVideoSettings(await loadUserConfig());
+  const checkWhisper = new URL(request.url).searchParams.get("whisper") === "1";
   let cookie = "";
   try {
     cookie = (await fs.readFile(getBilibiliCookiePath(), "utf-8")).trim();
@@ -21,14 +25,19 @@ export async function GET(): Promise<NextResponse> {
       nickname = null;
     }
   }
-  const whisper = await whisperStatus();
+
+  const cacheFresh = whisperCache && Date.now() - whisperCache.at < WHISPER_CACHE_MS;
+  if (checkWhisper && !cacheFresh) {
+    const whisper = await whisperStatus();
+    whisperCache = { at: Date.now(), available: whisper.available, detail: whisper.detail };
+  }
 
   return NextResponse.json({
     success: true,
     cookieSaved: Boolean(cookie),
     nickname,
-    whisperAvailable: whisper.available,
-    whisperDetail: whisper.detail,
+    whisperAvailable: whisperCache?.available ?? null,
+    whisperDetail: whisperCache?.detail ?? "",
     whisperModel: settings.whisperModel,
     whisperLanguage: settings.whisperLanguage,
     deleteAudioAfter: settings.deleteAudioAfter,

@@ -4,7 +4,7 @@ export const BILIBILI_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 export const BILIBILI_LOGIN_REQUIRED =
-  "This video has no official subtitles. Add a Bilibili cookie in Settings → Agent → Video, then capture it again.";
+  "This video has no official subtitles. Sign in from Settings → Accounts, then capture it again.";
 
 export const WHISPER_MISSING =
   "faster-whisper is not installed, so this video cannot be transcribed locally.";
@@ -123,14 +123,27 @@ export function segmentsFromSubtitleJson(payload: unknown): TranscriptSegment[] 
 }
 
 export function audioUrlFromPlayer(payload: unknown): string | null {
-  const audios = (payload as {
-    data?: { dash?: { audio?: { baseUrl?: string; base_url?: string; bandwidth?: number }[] } };
-  }).data?.dash?.audio ?? [];
-  const usable = audios
+  const data = (payload as {
+    data?: {
+      dash?: {
+        audio?: { baseUrl?: string; base_url?: string; bandwidth?: number }[];
+        dolby?: { audio?: { baseUrl?: string; base_url?: string; bandwidth?: number }[] };
+        flac?: { audio?: { baseUrl?: string; base_url?: string; bandwidth?: number } };
+      };
+      durl?: { url?: string }[];
+    };
+  }).data;
+  const tracks = [
+    ...(data?.dash?.audio ?? []),
+    ...(data?.dash?.dolby?.audio ?? []),
+    ...(data?.dash?.flac?.audio ? [data.dash.flac.audio] : []),
+  ];
+  const usable = tracks
     .map((audio) => ({ url: audio.baseUrl || audio.base_url || "", bandwidth: audio.bandwidth ?? Number.MAX_SAFE_INTEGER }))
     .filter((audio) => audio.url);
   usable.sort((a, b) => a.bandwidth - b.bandwidth);
-  return usable[0]?.url ?? null;
+  if (usable[0]?.url) return usable[0].url;
+  return data?.durl?.find((item) => item.url)?.url ?? null;
 }
 
 export type TranscriptStep = "use-official" | "need-login" | "use-cookie" | "transcribe";
@@ -177,6 +190,41 @@ export function segmentsToSrt(segments: TranscriptSegment[]): string {
   return segments.map((segment, index) => (
     `${index + 1}\n${formatSrtTime(segment.start)} --> ${formatSrtTime(segment.end)}\n${segment.text}\n`
   )).join("\n");
+}
+
+export function transcriptBody(markdown: string): string {
+  const lines = markdown.split(/\r?\n/).filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) return false;
+    if (trimmed.startsWith("Uploader:") || trimmed.startsWith("Duration:")) return false;
+    return true;
+  });
+  return lines.join("\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function textChunks(text: string, limit = 12000): string[] {
+  if (text.length <= limit) return text ? [text] : [];
+  const parts: string[] = [];
+  let current = "";
+  for (const paragraph of text.split(/\n\n+/)) {
+    const piece = paragraph.trim();
+    if (!piece) continue;
+    if (piece.length > limit) {
+      if (current) parts.push(current);
+      for (let index = 0; index < piece.length; index += limit) parts.push(piece.slice(index, index + limit));
+      current = "";
+      continue;
+    }
+    if (current && current.length + piece.length + 2 > limit) {
+      parts.push(current);
+      current = piece;
+    } else {
+      current = current ? `${current}\n\n${piece}` : piece;
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
 }
 
 export function sampleTranscript(text: string, limit = 18000): string {

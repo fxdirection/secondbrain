@@ -2,6 +2,10 @@ import { debugLog } from "@/lib/log";
 import { NextRequest, NextResponse } from "next/server";
 import { getSourceType, getTypeFromExtension } from "@/lib/content";
 import { canonicalBilibiliUrl } from "@/lib/bilibili";
+import { canonicalZhihuUrl } from "@/lib/zhihu";
+import { canonicalYouTubeUrl } from "@/lib/youtube";
+import { canonicalXiaohongshuUrl } from "@/lib/xiaohongshu";
+import { canonicalDouyinUrl } from "@/lib/douyin";
 import { createPendingSource, ensureLibraryExists } from "@/lib/storage";
 import { SourceType } from "@/lib/types";
 import { processSourceInBackground, processFileInBackground } from "@/lib/capturePipeline";
@@ -30,8 +34,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const body = await request.json();
     let { url, text, title, html } = body;
     const bilibiliUrl = !html ? canonicalBilibiliUrl(url || text || "") : null;
-    if (bilibiliUrl) {
-      url = bilibiliUrl;
+    const zhihuUrl = !html && !bilibiliUrl ? canonicalZhihuUrl(url || text || "") : null;
+    const youtubeUrl = !html && !bilibiliUrl && !zhihuUrl ? canonicalYouTubeUrl(url || text || "") : null;
+    const xhsUrl = !html && !bilibiliUrl && !zhihuUrl && !youtubeUrl ? canonicalXiaohongshuUrl(url || text || "") : null;
+    const douyinUrl = !html && !bilibiliUrl && !zhihuUrl && !youtubeUrl && !xhsUrl ? canonicalDouyinUrl(url || text || "") : null;
+    if (bilibiliUrl || zhihuUrl || youtubeUrl || xhsUrl || douyinUrl) {
+      url = bilibiliUrl || zhihuUrl || youtubeUrl || xhsUrl || douyinUrl;
       text = undefined;
     }
 

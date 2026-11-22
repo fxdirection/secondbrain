@@ -24,6 +24,7 @@ import {
   getLibraryPath,
   loadUserConfig,
   normalizeVideoSettings,
+  updatePendingTitle,
   writeSourceProgress,
 } from "./storage";
 import { transcribeAudio, whisperStatus } from "./whisper";
@@ -39,10 +40,15 @@ async function readCookie(): Promise<string | null> {
   }
 }
 
-async function fetchJson(url: string, cookie: string | undefined, fetchImpl: FetchLike): Promise<Record<string, unknown>> {
+async function fetchJson(
+  url: string,
+  cookie: string | undefined,
+  fetchImpl: FetchLike,
+  referer = "https://www.bilibili.com"
+): Promise<Record<string, unknown>> {
   const headers: Record<string, string> = {
     "User-Agent": BILIBILI_USER_AGENT,
-    Referer: "https://www.bilibili.com",
+    Referer: referer,
   };
   if (cookie) headers.Cookie = cookie;
   const response = await fetchImpl(url, { headers });
@@ -95,6 +101,22 @@ async function wbiKeys(cookie: string | undefined, fetchImpl: FetchLike): Promis
   return { imgKey: imgKeyFromUrl(imgUrl), subKey: imgKeyFromUrl(subUrl) };
 }
 
+async function playurlPayload(video: BilibiliVideo, cookie: string | undefined, fetchImpl: FetchLike): Promise<unknown> {
+  const referer = `https://www.bilibili.com/video/${video.bvid}/`;
+  const params = { bvid: video.bvid, cid: video.cid, qn: 64, fnval: 4048, fnver: 0, fourk: 1 };
+  const plain = await fetchJson(
+    `https://api.bilibili.com/x/player/playurl?${new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)]))}`,
+    cookie,
+    fetchImpl,
+    referer
+  );
+  if (audioUrlFromPlayer(plain)) return plain;
+  const keys = await wbiKeys(cookie, fetchImpl);
+  if (!keys) return plain;
+  const signed = signWbi(params, keys.imgKey, keys.subKey);
+  return fetchJson(`https://api.bilibili.com/x/player/wbi/playurl?${signed}`, cookie, fetchImpl, referer);
+}
+
 async function playerPayload(video: BilibiliVideo, cookie: string | undefined, fetchImpl: FetchLike): Promise<unknown> {
   const plain = await fetchJson(
     `https://api.bilibili.com/x/player/v2?bvid=${video.bvid}&cid=${video.cid}&fnval=16`,
@@ -141,6 +163,7 @@ export async function captureBilibiliVideo(
 ): Promise<{ title: string; markdown: string; srt: string; url: string }> {
   await writeSourceProgress(id, "Confirming the video");
   const video = await resolveVideo(input, fetchImpl);
+  await updatePendingTitle(id, video.title).catch(() => undefined);
   const cookie = await readCookie();
   await writeSourceProgress(id, "Checking official subtitles");
   const official = await officialSegments(video, undefined, fetchImpl);
@@ -153,8 +176,8 @@ export async function captureBilibiliVideo(
   if (step === "need-login") throw new Error(BILIBILI_LOGIN_REQUIRED);
   if (step === "transcribe") {
     const status = await whisperStatus();
-    if (!status.available) throw new Error(WHISPER_MISSING);
-    const signedIn = await playerPayload(video, cookie || undefined, fetchImpl);
+    if (!status.available) throw new Error(status.detail || WHISPER_MISSING);
+    const signedIn = await playurlPayload(video, cookie || undefined, fetchImpl);
     const audioUrl = audioUrlFromPlayer(signedIn);
     if (!audioUrl) throw new Error("Bilibili did not provide an audio track for this video.");
     await writeSourceProgress(id, "Downloading audio");

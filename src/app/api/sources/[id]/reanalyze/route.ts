@@ -4,6 +4,10 @@ import { loadSource, findEntryPath, listSourcesForConnections, setSourceConnecti
 import { analyzeContent, formatTextContent, findRelatedSources, analyzeConnections, mergeSourceIntoConnections } from "@/lib/claude";
 import { extractFromUrl, extractFromHtml } from "@/lib/content";
 import { isBilibiliInput, sampleTranscript } from "@/lib/bilibili";
+import { isZhihuInput } from "@/lib/zhihu";
+import { isYouTubeInput } from "@/lib/youtube";
+import { isXiaohongshuInput } from "@/lib/xiaohongshu";
+import { isDouyinInput } from "@/lib/douyin";
 import { Connection } from "@/lib/types";
 import { promises as fs } from "fs";
 import path from "path";
@@ -53,7 +57,7 @@ export async function POST(
       const extracted = await extractFromHtml(source.originalContent, source.meta.sourceUrl, undefined, id);
       newContent = extracted.content;
       newTitle = extracted.title;
-    } else if (source.meta.sourceUrl && isBilibiliInput(source.meta.sourceUrl) && source.content) {
+    } else if (source.meta.sourceUrl && (isBilibiliInput(source.meta.sourceUrl) || isZhihuInput(source.meta.sourceUrl) || isYouTubeInput(source.meta.sourceUrl) || isXiaohongshuInput(source.meta.sourceUrl) || isDouyinInput(source.meta.sourceUrl)) && source.content) {
       debugLog("Re-analyzing the saved Bilibili transcript...");
       newContent = source.content;
       newTitle = source.meta.title;
@@ -77,7 +81,7 @@ export async function POST(
 
     // Re-analyze the content with new title
     debugLog("Re-analyzing content...");
-    const analysisInput = source.meta.sourceUrl && isBilibiliInput(source.meta.sourceUrl)
+    const analysisInput = source.meta.sourceUrl && (isBilibiliInput(source.meta.sourceUrl) || isZhihuInput(source.meta.sourceUrl) || isYouTubeInput(source.meta.sourceUrl) || isXiaohongshuInput(source.meta.sourceUrl) || isDouyinInput(source.meta.sourceUrl))
       ? sampleTranscript(newContent)
       : newContent;
     const analysis = await analyzeContent(

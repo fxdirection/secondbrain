@@ -5,6 +5,7 @@ import { BraveSearchResult } from "./search";
 import { FEED_CONFIG } from "./config";
 import path from "path";
 import { getLibraryPath, listSourcesForConnections, findEntryPath } from "./storage";
+import { textChunks, transcriptBody } from "./bilibili";
 import { callAgent, callAgentWithFileAccess, invalidateAgentProfileCache } from "./agent";
 import {
   promptGenerateTitle,
@@ -98,6 +99,27 @@ export async function extractReadableContent(html: string, sourceId?: string): P
 export async function formatTextContent(text: string, sourceId?: string): Promise<string> {
   const prompt = promptFormatText(text.slice(0, 30000));
   return await callAgent(prompt, `${sourceId ?? "unknown"}-formatText`);
+}
+
+function stripMarkdownFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
+export async function formatTranscriptContent(markdown: string, sourceId?: string): Promise<string> {
+  const plain = transcriptBody(markdown);
+  const chunks = textChunks(plain, 12000);
+  const parts: string[] = [];
+  for (let index = 0; index < chunks.length; index += 1) {
+    const formatted = await callAgent(
+      promptFormatText(chunks[index]),
+      `${sourceId ?? "unknown"}-formatTranscript-${index + 1}`
+    );
+    const cleaned = stripMarkdownFence(formatted);
+    if (cleaned) parts.push(cleaned);
+  }
+  return parts.join("\n\n").trim() || plain;
 }
 
 /**

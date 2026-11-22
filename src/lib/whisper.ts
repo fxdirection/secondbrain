@@ -70,20 +70,37 @@ export function segmentsFromWhisperStdout(stdout: string): TranscriptSegment[] {
 export function whisperFailure(stderr: string): Error {
   if (/cuda|cublas|cudnn/i.test(stderr)) return new Error(CUDA_FAILED);
   if (/No module named ['"]faster_whisper['"]|ModuleNotFoundError/i.test(stderr)) return new Error(WHISPER_MISSING);
-  const detail = stderr.trim().slice(0, 180);
+  const lines = stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const detail = lines.slice(-3).join(" ").slice(0, 300);
   return new Error(detail ? `Local transcription failed. ${detail}` : "Local transcription failed.");
 }
 
+const WHISPER_CHECK_TIMEOUT_MS = 120_000;
+let whisperStatusCache: { at: number; available: boolean; detail: string } | null = null;
+
 export async function whisperStatus(runner: CommandRunner = runCommand): Promise<{ available: boolean; detail: string }> {
+  const cacheFresh = runner === runCommand
+    && whisperStatusCache?.available
+    && Date.now() - whisperStatusCache.at < 10 * 60 * 1000;
+  if (cacheFresh && whisperStatusCache) return whisperStatusCache;
+
   try {
-    const result = await runner("python", ["-c", "import faster_whisper"], 20000);
-    if (result.code === 0) return { available: true, detail: "faster-whisper is available." };
-    return { available: false, detail: "faster-whisper is not installed." };
+    const result = await runner("python", ["-c", "import faster_whisper"], WHISPER_CHECK_TIMEOUT_MS);
+    if (result.code === 0) {
+      const value = { available: true, detail: "faster-whisper is available." };
+      if (runner === runCommand) whisperStatusCache = { at: Date.now(), ...value };
+      return value;
+    }
+    const detail = result.stderr.trim().slice(0, 180);
+    if (/No module named ['"]faster_whisper['"]|ModuleNotFoundError/i.test(detail)) {
+      return { available: false, detail: "faster-whisper is not installed." };
+    }
+    return { available: false, detail: detail || "faster-whisper is not installed." };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return { available: false, detail: "Python is not installed." };
     }
-    return { available: false, detail: "faster-whisper is not installed." };
+    return { available: false, detail: "Python took too long to load faster-whisper." };
   }
 }
 
